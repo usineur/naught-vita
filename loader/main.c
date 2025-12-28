@@ -1075,14 +1075,14 @@ void *pthread_main(void *arg) {
 	int (* engineSurfaceCreated) () = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnSurfaceCreated");
 	int (* engineSurfaceChanged) (void *env, void *obj, int width, int height) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnSurfaceChanged");
 	int (* engineOnMouseMove) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseMove");
-	int (* engineOnMouseUp) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonUp");
-	int (* engineOnMouseDown) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonDown");
+	int (* engineOnMouseButtonUp) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonUp");
+	int (* engineOnMouseButtonDown) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonDown");
 	int (* engineOnDeviceMove) (void *env, void *obj, float x, float y, float z) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnDeviceMove");
 
 	sceClibPrintf("JNI_OnLoad\n");
 	JNI_OnLoad(fake_vm);
 
-	engineSetSystemVersion(fake_env, NULL, "v.1.0-vita");
+	engineSetSystemVersion(fake_env, NULL, "v.1.1-vita");
 	engineSetDirectories(fake_env, NULL, "ux0:data/naught", "ux0:data/naught", "ux0:data/naught");
 
 	engineSurfaceCreated();
@@ -1097,6 +1097,15 @@ void *pthread_main(void *arg) {
 
 	sceClibPrintf("Entering main loop\n");
 
+	#define handleKey(btn, vx, vy) \
+		if (((pad.buttons & btn) == btn) && !((oldpad & btn) == btn)) { \
+			memset(&touch, 0, sizeof(touch)); \
+			touch.reportNum = 1; \
+			touch.report[0].x = vx * 2; \
+			touch.report[0].y = vy * 2; \
+			oldpad = pad.buttons; \
+		}
+
 	int lastX = -1, lastY = -1;
 
 	sceMotionStartSampling();
@@ -1104,6 +1113,10 @@ void *pthread_main(void *arg) {
 	sceCtrlSetSamplingModeExt(SCE_CTRL_MODE_ANALOG_WIDE);
 
 	for (;;) {
+		SceCtrlData pad;
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+		int oldpad = 0;
+
 		SceTouchData touch;
 		sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1);
 
@@ -1113,18 +1126,20 @@ void *pthread_main(void *arg) {
 
 		for (int j = 0; j < 6; j++) {
 			if (j == 0) {
+				handleKey(SCE_CTRL_LTRIGGER, 128, 512);
+				handleKey(SCE_CTRL_RTRIGGER, 832, 512);
 				if (touch.reportNum) {
 					int x = (int)(touch.report[0].x * 0.5f);
 					int y = (int)(touch.report[0].y * 0.5f);
 					if (lastX == -1 || lastY == -1) {
-						engineOnMouseDown(fake_env, NULL, (float)x, (float)y);
+						engineOnMouseButtonDown(fake_env, NULL, (float)x, (float)y);
 					} else {
 						engineOnMouseMove(fake_env, NULL, (float)x, (float)y);
 					}
 					lastX = x;
 					lastY = y;
 				} else {
-					engineOnMouseUp(fake_env, NULL, (float)lastX, (float)lastY);
+					engineOnMouseButtonUp(fake_env, NULL, (float)lastX, (float)lastY);
 					lastX = lastY = -1;
 				}
 			} else {

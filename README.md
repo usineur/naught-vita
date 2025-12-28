@@ -13,6 +13,10 @@ By doing so, it's basically as if we emulate a minimalist Android environment in
 
 ## Changelog
 
+### v1.1
+
+- Added L/R triggers in-game.
+
 ### v1.0
 
 - Initial Release.
