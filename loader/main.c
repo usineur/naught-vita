@@ -26,7 +26,6 @@
 #include <AL/alext.h>
 #include <AL/efx.h>
 
-#include "main.h"
 #include "config.h"
 #include "dialog.h"
 #include "so_util.h"
@@ -72,7 +71,7 @@ int ret0(void) {
 	return 0;
 }
 
-#define  MUTEX_TYPE_NORMAL	 0x0000
+#define  MUTEX_TYPE_NORMAL     0x0000
 #define  MUTEX_TYPE_RECURSIVE  0x4000
 #define  MUTEX_TYPE_ERRORCHECK 0x8000
 
@@ -1006,7 +1005,13 @@ void GetStringUTFRegion(void *env, char *str, size_t start, size_t len, char *bu
 	buf[len] = 0;
 }
 
-int GetIntField(void *env, void *obj, int fieldID) { return 0; }
+void *CallStaticObjectMethodV(void *env, void *obj, int methodID, uintptr_t *args) {
+	return NULL;
+}
+
+int GetIntField(void *env, void *obj, int fieldID) {
+	return 0;
+}
 
 float GetFloatField(void *env, void *obj, int fieldID) {
 	switch (fieldID) {
@@ -1033,8 +1038,7 @@ int GetArrayLength(void *env, void *array) {
 void patch_game(void) {
 	hook_addr(so_symbol(&main_mod, "S3DClient_InstallCurrentUserEventHook"), (uintptr_t)&ret0);
 
-	//uint32_t nop = 0xE1A00000;
-	//kuKernelCpuUnrestrictedMemcpy((void *)(main_mod.text_base + 0x4B874C), &nop, sizeof(nop));
+	//getCurrentUserEnvironmentVariable_hook = hook_addr(main_mod.text_base + 0x2183CC, (uintptr_t)&getCurrentUserEnvironmentVariable);
 }
 
 void SplashRender() {
@@ -1075,14 +1079,14 @@ void *pthread_main(void *arg) {
 	int (* engineSurfaceCreated) () = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnSurfaceCreated");
 	int (* engineSurfaceChanged) (void *env, void *obj, int width, int height) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnSurfaceChanged");
 	int (* engineOnMouseMove) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseMove");
-	int (* engineOnMouseUp) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonUp");
-	int (* engineOnMouseDown) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonDown");
+	int (* engineOnMouseButtonUp) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonUp");
+	int (* engineOnMouseButtonDown) (void *env, void *obj, float x, float y) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnMouseButtonDown");
 	int (* engineOnDeviceMove) (void *env, void *obj, float x, float y, float z) = (void *)so_symbol(&main_mod, "Java_com_blueshadowgames_naught_S3DRenderer_engineOnDeviceMove");
 
 	sceClibPrintf("JNI_OnLoad\n");
 	JNI_OnLoad(fake_vm);
 
-	engineSetSystemVersion(fake_env, NULL, "v.1.0-vita");
+	engineSetSystemVersion(fake_env, NULL, "v.1.1-vita");
 	engineSetDirectories(fake_env, NULL, "ux0:data/naught", "ux0:data/naught", "ux0:data/naught");
 
 	engineSurfaceCreated();
@@ -1097,6 +1101,13 @@ void *pthread_main(void *arg) {
 
 	sceClibPrintf("Entering main loop\n");
 
+	#define handleKey(btn, vx, vy) \
+		if ((pad.buttons & btn) == btn) { \
+			touch.report[touch.reportNum].x = vx * 2; \
+			touch.report[touch.reportNum].y = vy * 2; \
+			touch.reportNum += 1; \
+		}
+
 	int lastX = -1, lastY = -1;
 
 	sceMotionStartSampling();
@@ -1104,6 +1115,9 @@ void *pthread_main(void *arg) {
 	sceCtrlSetSamplingModeExt(SCE_CTRL_MODE_ANALOG_WIDE);
 
 	for (;;) {
+		SceCtrlData pad;
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+
 		SceTouchData touch;
 		sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1);
 
@@ -1113,18 +1127,20 @@ void *pthread_main(void *arg) {
 
 		for (int j = 0; j < 6; j++) {
 			if (j == 0) {
+				handleKey(SCE_CTRL_LEFT, 128, 512);
+				handleKey(SCE_CTRL_RIGHT, 832, 512);
 				if (touch.reportNum) {
 					int x = (int)(touch.report[0].x * 0.5f);
 					int y = (int)(touch.report[0].y * 0.5f);
 					if (lastX == -1 || lastY == -1) {
-						engineOnMouseDown(fake_env, NULL, (float)x, (float)y);
+						engineOnMouseButtonDown(fake_env, NULL, (float)x, (float)y);
 					} else {
 						engineOnMouseMove(fake_env, NULL, (float)x, (float)y);
 					}
 					lastX = x;
 					lastY = y;
 				} else {
-					engineOnMouseUp(fake_env, NULL, (float)lastX, (float)lastY);
+					engineOnMouseButtonUp(fake_env, NULL, (float)lastX, (float)lastY);
 					lastX = lastY = -1;
 				}
 			} else {
@@ -1226,6 +1242,7 @@ int main(int argc, char *argv[]) {
 	*(uintptr_t *)(fake_env + 0x190) = (uintptr_t)GetIntField;
 	*(uintptr_t *)(fake_env + 0x198) = (uintptr_t)GetFloatField;
 	*(uintptr_t *)(fake_env + 0x1C4) = (uintptr_t)GetStaticMethodID;
+	*(uintptr_t *)(fake_env + 0x1CC) = (uintptr_t)CallStaticObjectMethodV;
 	*(uintptr_t *)(fake_env + 0x1D8) = (uintptr_t)CallStaticBooleanMethodV;
 	*(uintptr_t *)(fake_env + 0x208) = (uintptr_t)CallStaticIntMethodV;
 	*(uintptr_t *)(fake_env + 0x21C) = (uintptr_t)CallStaticLongMethodV;
